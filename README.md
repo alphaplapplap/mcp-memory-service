@@ -63,15 +63,6 @@ cd mcp-memory-service
 python install.py
 ```
 
-**Docker (Fastest):**
-```bash
-# For MCP protocol (Claude Desktop)
-docker-compose up -d
-
-# For HTTP API + OAuth (Team Collaboration)
-docker-compose -f docker-compose.http.yml up -d
-```
-
 **Smithery (Claude Desktop):**
 ```bash
 # Auto-install for Claude Desktop
@@ -172,7 +163,7 @@ These warnings disappear after the first successful run. The service is working 
 - **Cross-platform** - Windows, macOS, Linux
 - **Service installation** - Auto-start background operation
 - **HTTPS/SSL** - Secure connections with OAuth 2.1
-- **Docker support** - Easy deployment with team collaboration
+- **Team collaboration** - OAuth 2.1 with HTTP API support
 
 ## 💡 Basic Usage
 
@@ -290,7 +281,7 @@ mcp-memory-service/
 │   └── server.py              # MCP server
 ├── scripts/                   # Utilities & installation
 ├── tests/                     # Test suite
-└── tools/docker/              # Docker configuration
+└── tools/                     # Development tools
 ```
 
 ### Contributing

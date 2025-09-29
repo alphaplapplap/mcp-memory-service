@@ -6,7 +6,7 @@ Welcome to the comprehensive documentation for MCP Memory Service - a Model Cont
 
 - **New Users**: Start with the [Installation Guide](installation/master-guide.md)
 - **Multi-Client Setup**: See [Multi-Client Integration](integration/multi-client.md)
-- **Docker Users**: Check out [Docker Deployment](deployment/docker.md)
+- **Deployment**: Check out deployment options in platform-specific guides
 - **Troubleshooting**: Visit [General Troubleshooting](troubleshooting/general.md)
 
 ## Documentation Structure
@@ -28,7 +28,6 @@ Welcome to the comprehensive documentation for MCP Memory Service - a Model Cont
 
 ### 🚀 Deployment
 
-- **[Docker Deployment](deployment/docker.md)** - Containerized deployment with various configurations
 - **[Server Deployment](deployment/multi-client-server.md)** - Production server setups
 - **[Cloud Deployment](glama-deployment.md)** - Cloud platform deployment guides
 
@@ -69,7 +68,6 @@ Welcome to the comprehensive documentation for MCP Memory Service - a Model Cont
 ### 🔍 Troubleshooting
 
 - **[General Troubleshooting](troubleshooting/general.md)** - Common issues and solutions
-- **[Docker Issues](deployment/docker.md#troubleshooting)** - Docker-specific troubleshooting
 - **[Platform-Specific Issues](platforms/)** - Platform-specific troubleshooting sections
 
 ## Project Information
@@ -82,7 +80,7 @@ MCP Memory Service enables persistent, semantic memory for AI applications throu
 - **Multiple Storage Backends**: ChromaDB for full features, SQLite-vec for lightweight deployments
 - **Multi-Client Support**: Shared memory across multiple applications
 - **Cross-Platform**: Support for macOS, Windows, and Linux
-- **Flexible Deployment**: Local installation, Docker containers, or cloud deployment
+- **Flexible Deployment**: Local installation, cloud deployment, or systemd services
 
 ### Key Features
 
@@ -90,7 +88,6 @@ MCP Memory Service enables persistent, semantic memory for AI applications throu
 - ✅ **Multi-Client Access**: Share memories across Claude Desktop, VS Code, and other MCP clients
 - ✅ **Flexible Storage**: Choose between ChromaDB (full-featured) or SQLite-vec (lightweight)
 - ✅ **Cross-Platform**: Native support for macOS (Intel & Apple Silicon), Windows, and Linux
-- ✅ **Docker Ready**: Complete containerization support with multiple deployment options
 - ✅ **Hardware Optimized**: Automatic detection and optimization for available hardware (CUDA, MPS, DirectML)
 - ✅ **Production Ready**: HTTP/SSE API, authentication, monitoring, and scaling features
 
@@ -99,7 +96,6 @@ MCP Memory Service enables persistent, semantic memory for AI applications throu
 - **v0.2.2+**: Enhanced multi-client support with automatic MCP application detection
 - **SQLite-vec Backend**: Lightweight alternative to ChromaDB for resource-constrained systems
 - **Homebrew Integration**: Native support for Homebrew-installed PyTorch on macOS
-- **Docker Improvements**: Fixed boot loops, added multiple deployment configurations
 - **HTTP/SSE API**: Real-time multi-client communication with Server-Sent Events
 
 ## Getting Help
@@ -130,7 +126,7 @@ We welcome contributions! See the [Development Guide](technical/development.md) 
 
 - **Latest**: Enhanced documentation organization, consolidated guides, improved navigation
 - **v0.2.2**: Multi-client improvements, SQLite-vec backend, Homebrew integration
-- **v0.2.1**: Docker deployment fixes, HTTP/SSE API enhancements
+- **v0.2.1**: Deployment fixes, HTTP/SSE API enhancements
 - **v0.2.0**: Multi-client support, cross-platform compatibility improvements
 
 ---
