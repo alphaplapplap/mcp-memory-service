@@ -1,20 +1,22 @@
 {
   "memoryService": {
-    "protocol": "mcp",
+    "protocol": "auto",
     "preferredProtocol": "mcp",
     "fallbackEnabled": true,
     "http": {
       "endpoint": "https://localhost:8443",
       "apiKey": "test-key-123",
       "healthCheckTimeout": 3000,
-      "useDetailedHealthCheck": false
+      "useDetailedHealthCheck": true
     },
     "mcp": {
       "serverCommand": [
         "uv",
         "run",
         "memory",
-        "server"
+        "server",
+        "-s",
+        "cloudflare"
       ],
       "serverWorkingDir": "/Users/linuxbabe/mcp-memory-service",
       "connectionTimeout": 5000,
