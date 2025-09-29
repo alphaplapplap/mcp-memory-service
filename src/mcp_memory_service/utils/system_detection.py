@@ -244,19 +244,24 @@ class SystemInfo:
             return 2  # Conservative for low-memory systems
             
     def get_optimal_model(self) -> str:
-        """Determine the optimal embedding model based on hardware capabilities."""
-        # Default model
-        default_model = 'all-MiniLM-L6-v2'
-        
-        # For very constrained environments, use an even smaller model
+        """
+        Determine the optimal embedding model based on hardware capabilities.
+
+        NOTE: We only use MiniLM models (removed mpnet for speed/size).
+        MiniLM models are:
+        - Faster to load and run
+        - Smaller memory footprint
+        - Still excellent quality for semantic search
+        """
+        # Default model for most environments
+        default_model = 'sentence-transformers/all-MiniLM-L6-v2'
+
+        # For very constrained environments (< 4GB RAM), use smallest model
         if self.memory_gb < 4:
-            return 'paraphrase-MiniLM-L3-v2'
-            
-        # For high-performance environments, consider a larger model
-        if (self.accelerator in [AcceleratorType.CUDA, AcceleratorType.MPS] and 
-                self.memory_gb > 8):
-            return 'all-mpnet-base-v2'  # Better quality but more resource intensive
-            
+            return 'sentence-transformers/paraphrase-MiniLM-L3-v2'
+
+        # For all other cases, use the default MiniLM-L6-v2
+        # (removed mpnet - we prioritize speed over marginal quality gains)
         return default_model
         
     def get_optimal_thread_count(self) -> int:

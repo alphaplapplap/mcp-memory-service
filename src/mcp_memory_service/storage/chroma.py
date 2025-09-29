@@ -67,14 +67,70 @@ _CACHE_LOCK = threading.Lock()
 _PERFORMANCE_STATS = {"query_times": [], "cache_hits": 0, "cache_misses": 0}
 
 # List of models to try in order of preference
-# From most capable to least capable
+# NOTE: all-mpnet-base-v2 removed - we only use MiniLM models (faster, smaller)
 MODEL_FALLBACKS = [
-    'all-mpnet-base-v2',      # High quality, larger model
-    'all-MiniLM-L6-v2',       # Good balance of quality and size
-    'paraphrase-MiniLM-L6-v2', # Alternative with similar size
-    'paraphrase-MiniLM-L3-v2', # Smaller model for constrained environments
-    'paraphrase-albert-small-v2' # Smallest model, last resort
+    'sentence-transformers/all-MiniLM-L6-v2',       # Primary: Good balance of quality and size
+    'sentence-transformers/paraphrase-MiniLM-L6-v2', # Alternative with similar size
+    'sentence-transformers/paraphrase-MiniLM-L3-v2', # Smaller model for constrained environments
 ]
+
+def is_model_fully_cached(model_name: str, hf_home: str) -> bool:
+    """
+    Check if a sentence-transformer model is fully cached and usable offline.
+
+    This prevents the bug where partially downloaded models cause offline mode
+    to be enabled, which then fails when trying to complete the download.
+
+    Args:
+        model_name: Model name like 'sentence-transformers/all-MiniLM-L6-v2'
+        hf_home: HuggingFace home directory path
+
+    Returns:
+        True if model is fully cached with all required files
+    """
+    model_path = os.path.join(hf_home, "hub", f"models--{model_name.replace('/', '--')}")
+
+    # Check if directory exists
+    if not os.path.exists(model_path):
+        return False
+
+    # Check for refs/main file (indicates successful download)
+    refs_main = os.path.join(model_path, "refs", "main")
+    if not os.path.exists(refs_main):
+        return False
+
+    # Read the snapshot hash
+    try:
+        with open(refs_main, 'r') as f:
+            snapshot_hash = f.read().strip()
+    except:
+        return False
+
+    # Check if snapshot directory exists
+    snapshot_dir = os.path.join(model_path, "snapshots", snapshot_hash)
+    if not os.path.exists(snapshot_dir):
+        return False
+
+    # Check for essential model files
+    required_files = ['config.json']
+    model_weight_files = ['model.safetensors', 'pytorch_model.bin']
+    tokenizer_files = ['tokenizer.json', 'tokenizer_config.json', 'vocab.txt']
+
+    # Must have config
+    if not os.path.exists(os.path.join(snapshot_dir, 'config.json')):
+        return False
+
+    # Must have at least one model weight file
+    has_weights = any(os.path.exists(os.path.join(snapshot_dir, f)) for f in model_weight_files)
+    if not has_weights:
+        return False
+
+    # Must have at least one tokenizer file
+    has_tokenizer = any(os.path.exists(os.path.join(snapshot_dir, f)) for f in tokenizer_files)
+    if not has_tokenizer:
+        return False
+
+    return True
 
 class ChromaMemoryStorage(MemoryStorage):
     def __init__(self, path: str, preload_model: bool = True):
@@ -204,17 +260,27 @@ class ChromaMemoryStorage(MemoryStorage):
         preferred_model = self.embedding_settings["model_name"]
         device = self.embedding_settings["device"]
         batch_size = self.embedding_settings["batch_size"]
-        
-        # Configure offline mode if models are cached
+
+        # Smart offline mode configuration - only enable if at least one model is FULLY cached
+        # This fixes the bug where partially downloaded models cause offline mode to fail
         hf_home = os.environ.get('HF_HOME', os.path.expanduser("~/.cache/huggingface"))
-        model_cache_path = os.path.join(hf_home, "hub", f"models--sentence-transformers--{preferred_model.replace('/', '--')}")
-        if os.path.exists(model_cache_path):
+        models_to_try = [preferred_model] + [m for m in MODEL_FALLBACKS if m != preferred_model]
+
+        # Check which models are fully cached (not just directory exists, but has all files)
+        fully_cached_models = [m for m in models_to_try if is_model_fully_cached(m, hf_home)]
+
+        if fully_cached_models:
+            # At least one model is fully cached - safe to use offline mode
             os.environ['HF_HUB_OFFLINE'] = '1'
             os.environ['TRANSFORMERS_OFFLINE'] = '1'
-            logger.info(f"Using offline mode for cached model: {preferred_model}")
-        
+            logger.info(f"✓ Offline mode enabled - {len(fully_cached_models)} model(s) fully cached: {', '.join([m.split('/')[-1] for m in fully_cached_models])}")
+        else:
+            # No fully cached models - ensure offline mode is NOT set
+            os.environ.pop('HF_HUB_OFFLINE', None)
+            os.environ.pop('TRANSFORMERS_OFFLINE', None)
+            logger.info(f"⚠ Online mode required - no fully cached models found (will download if needed)")
+
         # Try the preferred model first, then fall back to alternatives
-        models_to_try = [preferred_model] + [m for m in MODEL_FALLBACKS if m != preferred_model]
         
         for model_name in models_to_try:
             try:
@@ -354,7 +420,7 @@ class ChromaMemoryStorage(MemoryStorage):
             return
             
         # Configure offline mode for cached models
-        preferred_model = self.embedding_settings.get("model_name", "all-MiniLM-L6-v2")
+        preferred_model = self.embedding_settings.get("model_name", "sentence-transformers/all-MiniLM-L6-v2")
         hf_home = os.environ.get('HF_HOME', os.path.expanduser("~/.cache/huggingface"))
         model_cache_path = os.path.join(hf_home, "hub", f"models--sentence-transformers--{preferred_model.replace('/', '--')}")
         if os.path.exists(model_cache_path):
