@@ -61,7 +61,13 @@
       "Bash(curl:*)",
       "Read(${HOME}/mcp-context-provider/contexts/**)",
       "Read(${HOME}/mcp-context-provider/**)",
-      "Bash(git ls-tree:*)"
+      "Bash(git ls-tree:*)",
+      "Bash(env)",
+      "Read(//Users/linuxbabe/.cache/huggingface/hub/models--sentence-transformers--all-MiniLM-L6-v2/**)",
+      "Read(//Users/linuxbabe/.cache/huggingface/hub/models--sentence-transformers--all-MiniLM-L6-v2/snapshots/**)",
+      "Read(//Users/linuxbabe/.cache/huggingface/hub/models--sentence-transformers--all-mpnet-base-v2/snapshots/**)",
+      "Read(//Users/linuxbabe/.cache/huggingface/hub/models--sentence-transformers--all-mpnet-base-v2/snapshots/e8c3b32edf5434bc2275fc9bab85f82640a19130/**)",
+      "Read(//Users/linuxbabe/.claude/hooks/**)"
     ],
     "deny": [],
     "ask": [],

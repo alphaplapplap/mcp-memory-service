@@ -67,16 +67,16 @@ def server(debug, chroma_path, storage_backend):
     if chroma_path:
         os.environ['MCP_MEMORY_CHROMA_PATH'] = chroma_path
     
-    # Import and run the server main function
-    from ..server import main as server_main
-    
+    # Import and run the HTTP MCP server (mcp_server.py with FastMCP)
+    from ..mcp_server import main as mcp_server_main
+
     # Set debug flag
     if debug:
         import logging
         logging.basicConfig(level=logging.DEBUG)
-    
-    # Start the server
-    server_main()
+
+    # Start the HTTP MCP server
+    mcp_server_main()
 
 
 @cli.command()
