@@ -1,7 +1,7 @@
 {
   "memoryService": {
-    "protocol": "auto",
-    "preferredProtocol": "mcp",
+    "protocol": "http",
+    "preferredProtocol": "http",
     "fallbackEnabled": true,
     "http": {
       "endpoint": "https://localhost:8443",
@@ -16,7 +16,7 @@
         "memory",
         "server",
         "-s",
-        "cloudflare"
+        "chroma"
       ],
       "serverWorkingDir": "/Users/linuxbabe/mcp-memory-service",
       "connectionTimeout": 5000,

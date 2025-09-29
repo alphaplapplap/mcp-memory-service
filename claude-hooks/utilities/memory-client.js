@@ -92,6 +92,7 @@ class MemoryClient {
 
         await this.mcpClient.connect();
         this.mcpAvailable = true;
+        this.activeProtocol = 'mcp';
         return this.mcpClient;
     }
 
@@ -105,6 +106,7 @@ class MemoryClient {
             throw new Error(`HTTP connection failed: ${healthResult.error}`);
         }
         this.httpAvailable = true;
+        this.activeProtocol = 'http';
         return true;
     }
 

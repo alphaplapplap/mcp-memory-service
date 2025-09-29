@@ -338,6 +338,7 @@ const CONSOLE_COLORS = {
  * Main session start hook function with enhanced visual output
  */
 async function onSessionStart(context) {
+    let memoryClient = null;
     try {
         // Load configuration first to check verbosity settings
         const config = await loadConfig();
@@ -385,7 +386,6 @@ async function onSessionStart(context) {
         // Initialize memory client and detect storage backend
         const showStorageSource = config.memoryService?.showStorageSource !== false; // Default to true
         const sourceDisplayMode = config.memoryService?.sourceDisplayMode || 'brief';
-        let memoryClient = null;
         let storageInfo = null;
         let connectionInfo = null;
 
@@ -783,7 +783,7 @@ async function onSessionStart(context) {
                 maxContentLength: config.contextFormatting?.maxContentLength || 500,
                 maxContentLengthCLI: config.contextFormatting?.maxContentLengthCLI || 400,
                 maxContentLengthCategorized: config.contextFormatting?.maxContentLengthCategorized || 350,
-                storageInfo: showStorageSource ? (storageInfo || detectStorageBackend(config)) : null
+                storageInfo: showStorageSource ? (storageInfo || detectStorageBackendFallback(config)) : null
             });
             
             // Inject context into session
