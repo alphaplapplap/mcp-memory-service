@@ -64,10 +64,6 @@ def get_service_environment() -> Dict[str, str]:
     env = {
         'PYTHONPATH': str(paths['src_dir']),
         'MCP_MEMORY_STORAGE_BACKEND': os.getenv('MCP_MEMORY_STORAGE_BACKEND', 'sqlite_vec'),
-        'MCP_HTTP_ENABLED': 'true',
-        'MCP_HTTP_HOST': '0.0.0.0',
-        'MCP_HTTP_PORT': '8000',
-        'MCP_HTTPS_ENABLED': 'true',
         'MCP_MDNS_ENABLED': 'true',
         'MCP_MDNS_SERVICE_NAME': 'memory',
         'MCP_CONSOLIDATION_ENABLED': 'true',
@@ -143,13 +139,10 @@ def get_service_command() -> list:
     paths = get_service_paths()
     python_exe = get_python_executable()
     
-    # Use HTTP server script if available, otherwise fall back to main server
-    http_server = paths['scripts_dir'] / 'run_http_server.py'
+    # Use main server script if available
     main_server = paths['scripts_dir'] / 'run_memory_server.py'
-    
-    if http_server.exists():
-        return [python_exe, str(http_server)]
-    elif main_server.exists():
+
+    if main_server.exists():
         return [python_exe, str(main_server)]
     else:
         # Fall back to module execution
@@ -197,12 +190,9 @@ def print_service_info(api_key: str, platform_specific_info: Dict[str, str] = No
     print("\n" + "=" * 60)
     print("✅ MCP Memory Service Installed Successfully!")
     print("=" * 60)
-    
+
     print("\n📌 Service Information:")
-    print(f"  API Key: {api_key}")
-    print(f"  Dashboard: https://localhost:8000")
-    print(f"  API Docs: https://localhost:8000/api/docs")
-    print(f"  Health Check: https://localhost:8000/api/health")
+    print(f"  Service Key: {api_key}")
     
     if platform_specific_info:
         print("\n🖥️  Platform-Specific Commands:")

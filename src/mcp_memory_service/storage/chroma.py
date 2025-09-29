@@ -229,8 +229,10 @@ class ChromaMemoryStorage(MemoryStorage):
                 if device != "cpu" and hasattr(model, 'half'):
                     try:
                         model = model.half()
-                    except:
-                        pass  # Fallback to full precision
+                    except (RuntimeError, AttributeError) as e:
+                        logger.info(f"Half precision not available, using full precision: {e}")
+                    except Exception as e:
+                        logger.warning(f"Unexpected error enabling half precision: {e}")
                 
                 # Test the model
                 _ = model.encode("Test encoding", batch_size=1, show_progress_bar=False)

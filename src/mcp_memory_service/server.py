@@ -48,13 +48,15 @@ def detect_mcp_client():
             try:
                 cmdline = parent.cmdline()
                 cmdline_str = ' '.join(cmdline).lower()
-                
+
                 if 'claude' in cmdline_str:
                     return 'claude_desktop'
                 if 'lmstudio' in cmdline_str or 'lm-studio' in cmdline_str:
                     return 'lm_studio'
-            except:
-                pass
+            except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                logger.debug(f"Could not access parent process command line: {e}")
+            except Exception as e:
+                logger.warning(f"Unexpected error checking parent process: {e}")
         
         # Fallback: check environment variables
         if os.getenv('CLAUDE_DESKTOP'):
@@ -830,8 +832,10 @@ class MemoryServer:
                         description=f"All memories with tag '{tag}'",
                         mimeType="application/json"
                     ))
-            except:
-                pass  # If get_all_tags not available, skip
+            except AttributeError:
+                logger.debug("get_all_tags method not available in storage backend")
+            except Exception as e:
+                logger.warning(f"Error retrieving tags for resources: {e}")
             
             return resources
         
