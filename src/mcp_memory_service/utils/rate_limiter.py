@@ -32,7 +32,7 @@ class MemoryRateLimiter:
         similarity_threshold: float = 0.85,
         max_per_hour: int = 60,
         max_per_day: int = 500,
-        max_content_length: int = 10000,
+        max_content_length: int = 500,
         truncate_content: bool = True
     ):
         """
@@ -43,7 +43,7 @@ class MemoryRateLimiter:
             similarity_threshold: Similarity threshold for duplicate detection (0-1)
             max_per_hour: Maximum memories per hour (default: 60)
             max_per_day: Maximum memories per day (default: 500)
-            max_content_length: Maximum content length in characters (default: 10000)
+            max_content_length: Maximum content length in characters (default: 500 ~100 words)
             truncate_content: Whether to truncate content exceeding max length
         """
         self.min_interval = min_interval_seconds
@@ -141,8 +141,8 @@ class MemoryRateLimiter:
 
         # Truncate content if needed
         if self.truncate_content and len(content) > self.max_content_length:
-            truncated = content[:self.max_content_length - 100]
-            truncated += f"\n\n... [Content truncated from {len(content)} to {self.max_content_length} characters]"
+            truncated = content[:self.max_content_length - 50]
+            truncated += f" ... [truncated from {len(content)} chars]"
             logger.info(f"Content truncated from {len(content)} to {len(truncated)} characters")
             return truncated
 
@@ -243,7 +243,7 @@ def get_rate_limiter(
         min_interval = min_interval or int(os.getenv('MCP_MEMORY_MIN_INTERVAL', '30'))
         max_per_hour = max_per_hour or int(os.getenv('MCP_MEMORY_MAX_PER_HOUR', '60'))
         max_per_day = max_per_day or int(os.getenv('MCP_MEMORY_MAX_PER_DAY', '500'))
-        max_content_length = max_content_length or int(os.getenv('MCP_MEMORY_MAX_LENGTH', '10000'))
+        max_content_length = max_content_length or int(os.getenv('MCP_MEMORY_MAX_LENGTH', '500'))
 
         _global_rate_limiter = MemoryRateLimiter(
             min_interval_seconds=min_interval,

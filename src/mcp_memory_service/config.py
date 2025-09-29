@@ -448,7 +448,7 @@ INCLUDE_HOSTNAME = os.getenv('MCP_MEMORY_INCLUDE_HOSTNAME', 'false').lower() == 
 MEMORY_MIN_INTERVAL = safe_get_int_env('MCP_MEMORY_MIN_INTERVAL', 30, min_value=5, max_value=300)  # 5 seconds to 5 minutes
 MEMORY_MAX_PER_HOUR = safe_get_int_env('MCP_MEMORY_MAX_PER_HOUR', 60, min_value=1, max_value=1000)
 MEMORY_MAX_PER_DAY = safe_get_int_env('MCP_MEMORY_MAX_PER_DAY', 500, min_value=10, max_value=10000)
-MEMORY_MAX_CONTENT_LENGTH = safe_get_int_env('MCP_MEMORY_MAX_LENGTH', 10000, min_value=100, max_value=100000)
+MEMORY_MAX_CONTENT_LENGTH = safe_get_int_env('MCP_MEMORY_MAX_LENGTH', 500, min_value=100, max_value=50000)  # ~100 words (500 chars)
 MEMORY_TRUNCATE_CONTENT = safe_get_bool_env('MCP_MEMORY_TRUNCATE', True)
 
 # Consolidation archive location
