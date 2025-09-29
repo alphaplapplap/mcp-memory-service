@@ -1775,9 +1775,26 @@ class MemoryServer:
                             },
                             "required": ["content_hash", "updates"]
                         }
+                    ),
+                    types.Tool(
+                        name="check_rate_limit_status",
+                        description="""Check current rate limiting status and usage.
+
+                        Returns information about:
+                        - Current usage vs limits (hourly/daily)
+                        - Time until next allowed storage
+                        - Content length limits
+                        - Usage percentages
+
+                        Example:
+                        {}""",
+                        inputSchema={
+                            "type": "object",
+                            "properties": {}
+                        }
                     )
                 ]
-                
+
                 # Add consolidation tools if enabled
                 if CONSOLIDATION_ENABLED and self.consolidator:
                     consolidation_tools = [
@@ -2100,6 +2117,9 @@ class MemoryServer:
                 elif name == "update_memory_metadata":
                     logger.info("Calling handle_update_memory_metadata")
                     return await self.handle_update_memory_metadata(arguments)
+                elif name == "check_rate_limit_status":
+                    logger.info("Calling handle_check_rate_limit_status")
+                    return await self.handle_check_rate_limit_status(arguments)
                 # Consolidation tool handlers
                 elif name == "consolidate_memories":
                     logger.info("Calling handle_consolidate_memories")
@@ -2652,13 +2672,29 @@ class MemoryServer:
     async def handle_store_memory(self, arguments: dict) -> List[types.TextContent]:
         content = arguments.get("content")
         metadata = arguments.get("metadata", {})
-        
+        force = arguments.get("force", False)  # Allow bypass for system operations
+
         if not content:
             return [types.TextContent(type="text", text="Error: Content is required")]
-        
+
         try:
+            # Check rate limiting first
+            from .utils.rate_limiter import get_rate_limiter
+            rate_limiter = get_rate_limiter()
+
+            allowed, reason = rate_limiter.check_rate_limit(content, force=force)
+            if not allowed:
+                logger.info(f"Memory storage rate limited: {reason}")
+                return [types.TextContent(
+                    type="text",
+                    text=f"⏳ Rate limit: {reason}\n\nUse 'force: true' to bypass limits for critical information."
+                )]
+
             # Initialize storage lazily when needed
             storage = await self._ensure_storage_initialized()
+
+            # Apply content length limits and record the store
+            content = rate_limiter.record_store(content)
             
             # Normalize tags to a list
             tags = metadata.get("tags", "")
@@ -3738,6 +3774,46 @@ Memories Archived: {report.memories_archived}"""
             return [types.TextContent(
                 type="text",
                 text=f"Error recalling memories: {str(e)}"
+            )]
+
+    async def handle_check_rate_limit_status(self, arguments: dict) -> List[types.TextContent]:
+        """Handle checking rate limit status."""
+        try:
+            from .utils.rate_limiter import get_rate_limiter
+            rate_limiter = get_rate_limiter()
+
+            status = rate_limiter.get_status()
+
+            # Format the response
+            response_lines = [
+                "📊 Rate Limiter Status:",
+                "",
+                "⚙️ Limits:",
+                f"  • Minimum interval: {status['limits']['min_interval_seconds']} seconds",
+                f"  • Max per hour: {status['limits']['max_per_hour']}",
+                f"  • Max per day: {status['limits']['max_per_day']}",
+                f"  • Max content length: {status['limits']['max_content_length']} characters",
+                "",
+                "📈 Current Usage:",
+                f"  • Hourly: {status['current']['hourly_count']}/{status['limits']['max_per_hour']} ({status['usage']['hourly_usage_percent']}%)",
+                f"  • Daily: {status['current']['daily_count']}/{status['limits']['max_per_day']} ({status['usage']['daily_usage_percent']}%)",
+            ]
+
+            if status['current']['cooldown_remaining'] > 0:
+                response_lines.append(f"  • ⏳ Cooldown: {status['current']['cooldown_remaining']} seconds remaining")
+            else:
+                response_lines.append("  • ✅ Ready to store")
+
+            return [types.TextContent(
+                type="text",
+                text="\n".join(response_lines)
+            )]
+
+        except Exception as e:
+            logger.error(f"Error checking rate limit status: {str(e)}\n{traceback.format_exc()}")
+            return [types.TextContent(
+                type="text",
+                text=f"Error checking rate limit status: {str(e)}"
             )]
 
     async def handle_delete_by_timeframe(self, arguments: dict) -> List[types.TextContent]:
