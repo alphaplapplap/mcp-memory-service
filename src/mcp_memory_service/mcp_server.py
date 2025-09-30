@@ -16,6 +16,7 @@ Features:
 
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -32,10 +33,10 @@ sys.path.insert(0, str(src_dir))
 
 from fastmcp import FastMCP, Context
 from mcp.types import TextContent
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from typing import List
+from pydantic import BaseModel, Field
+from typing import List, Optional
 
 # Import existing memory service components
 from .config import (
@@ -92,12 +93,41 @@ def get_storage_backend():
         return _get_sqlite_vec_storage("Failed to import default SQLite-vec storage")
 from .models.memory import Memory
 
-# Configure logging with DEBUG level for extensive diagnostics
+# Configure logging with environment-controlled level
+log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+log_level = getattr(logging, log_level_name, logging.INFO)
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=log_level,
     format='%(levelname)s:%(name)s:%(message)s'
 )
 logger = logging.getLogger(__name__)
+logger.info(f"Logging level set to: {log_level_name}")
+
+# =============================================================================
+# SECURITY & VALIDATION
+# =============================================================================
+
+class RetrieveMemoryRequest(BaseModel):
+    """Validated request model for retrieve_memory tool"""
+    query: str = Field(min_length=1, max_length=10000, description="Search query")
+    n_results: int = Field(ge=1, le=100, default=5, description="Number of results to return")
+
+async def verify_api_key(x_api_key: Optional[str] = Header(None)):
+    """Verify API key for authenticated endpoints"""
+    expected_key = os.getenv("MCP_API_KEY")
+
+    # If no API key is configured, skip validation (for development)
+    if not expected_key:
+        logger.warning("⚠️  MCP_API_KEY not set - endpoints are UNSECURED!")
+        return
+
+    # Validate provided key
+    if not x_api_key or x_api_key != expected_key:
+        logger.warning(f"❌ Unauthorized access attempt from {os.getenv('REMOTE_ADDR', 'unknown')}")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key. Set X-API-Key header."
+        )
 
 # =============================================================================
 # REST API (FastAPI)
@@ -197,19 +227,86 @@ async def mcp_server_lifespan(server: FastMCP) -> AsyncIterator[MCPServerContext
                         logger.error(f"[DEBUG] EMBEDDING DIMENSION MISMATCH!")
                         logger.error(f"[DEBUG] Collection expects {collection_dim}d but model produces {model_dim}d")
                         logger.error(f"[DEBUG] This will cause ALL queries to fail with empty results!")
-                        logger.warning(f"[DEBUG] FIXING: Deleting and recreating collection...")
+                        logger.warning(f"[DEBUG] SAFE FIX: Backing up {count} memories before migration...")
 
-                        # Delete the collection
-                        storage.client.delete_collection("memory_collection")
-                        logger.info(f"[DEBUG] Deleted old collection with {count} incompatible memories")
+                        # SAFE FIX WITH BACKUP AND ROLLBACK
+                        backup_data = []
+                        migration_failed = False
 
-                        # Recreate with correct dimensions
-                        await storage.initialize()
+                        try:
+                            # Step 1: Export all memories with metadata
+                            logger.info(f"[DEBUG] Exporting {count} memories to backup...")
+                            all_results = collection.get(
+                                include=['documents', 'metadatas', 'embeddings']
+                            )
 
-                        # Explicitly refresh the collection reference to the new collection
-                        storage.collection = storage.client.get_collection("memory_collection")
-                        logger.info(f"[DEBUG] Recreated collection with {model_dim}d embeddings")
-                        logger.info(f"[DEBUG] Refreshed collection reference: {storage.collection.id}")
+                            for idx in range(len(all_results['ids'])):
+                                backup_data.append({
+                                    'id': all_results['ids'][idx],
+                                    'document': all_results['documents'][idx],
+                                    'metadata': all_results['metadatas'][idx],
+                                    'embedding': all_results['embeddings'][idx]
+                                })
+
+                            logger.info(f"[DEBUG] Successfully backed up {len(backup_data)} memories")
+
+                            # Step 2: Save backup to file for safety
+                            import json
+                            import tempfile
+                            backup_path = Path(tempfile.gettempdir()) / f"chroma_backup_{int(time.time())}.json"
+                            with open(backup_path, 'w') as f:
+                                json.dump({
+                                    'count': count,
+                                    'old_dim': collection_dim,
+                                    'new_dim': model_dim,
+                                    'memories': backup_data
+                                }, f)
+                            logger.info(f"[DEBUG] Backup saved to: {backup_path}")
+
+                            # Step 3: Delete the old collection
+                            storage.client.delete_collection("memory_collection")
+                            logger.info(f"[DEBUG] Deleted old collection with {count} incompatible memories")
+
+                            # Step 4: Recreate with correct dimensions
+                            await storage.initialize()
+                            storage.collection = storage.client.get_collection("memory_collection")
+                            logger.info(f"[DEBUG] Recreated collection with {model_dim}d embeddings")
+
+                            # Step 5: Re-import memories with re-embedding
+                            logger.info(f"[DEBUG] Re-importing {len(backup_data)} memories with correct embeddings...")
+                            for idx, mem_data in enumerate(backup_data):
+                                try:
+                                    # Re-add document (will generate new embedding with correct dimensions)
+                                    storage.collection.add(
+                                        ids=[mem_data['id']],
+                                        documents=[mem_data['document']],
+                                        metadatas=[mem_data['metadata']]
+                                    )
+                                    if (idx + 1) % 10 == 0:
+                                        logger.debug(f"[DEBUG] Re-imported {idx + 1}/{len(backup_data)} memories")
+                                except Exception as import_error:
+                                    logger.error(f"[DEBUG] Failed to re-import memory {idx}: {import_error}")
+
+                            # Step 6: Verify migration
+                            new_count = storage.collection.count()
+                            logger.info(f"[DEBUG] Migration complete: {count} → {new_count} memories")
+
+                            if new_count == count:
+                                logger.info(f"[DEBUG] ✅ All memories successfully migrated!")
+                                # Clean up backup file on success
+                                backup_path.unlink(missing_ok=True)
+                            else:
+                                logger.warning(f"[DEBUG] ⚠️  Migration incomplete: {count - new_count} memories lost")
+                                logger.warning(f"[DEBUG] Backup available at: {backup_path}")
+
+                        except Exception as migration_error:
+                            migration_failed = True
+                            logger.error(f"[DEBUG] ❌ MIGRATION FAILED: {migration_error}")
+                            logger.error(f"[DEBUG] Backup preserved at: {backup_path}")
+                            logger.error(f"[DEBUG] To restore manually: Use scripts/restore_from_backup.py")
+
+                            # Don't re-raise - let server start but with empty collection
+                            # User can restore from backup manually
                     else:
                         logger.info(f"[DEBUG] Embedding dimensions match - OK")
         except Exception as debug_error:
@@ -324,9 +421,9 @@ async def detailed_health_check():
         raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}")
 
 # MCP JSON-RPC endpoint
-@combined_app.post("/mcp")
+@combined_app.post("/mcp", dependencies=[Depends(verify_api_key)])
 async def mcp_endpoint(request: dict):
-    """Handle MCP protocol JSON-RPC requests"""
+    """Handle MCP protocol JSON-RPC requests (authenticated)"""
     logger.debug(f"[MCP] Received request: method={request.get('method')}, id={request.get('id')}")
 
     if not _storage:
@@ -352,10 +449,23 @@ async def mcp_endpoint(request: dict):
 
             # Route to appropriate tool
             if tool_name == "retrieve_memory":
-                query = arguments.get("query")
-                n_results = arguments.get("n_results", 5)
+                # Validate input parameters
+                try:
+                    validated = RetrieveMemoryRequest(
+                        query=arguments.get("query", ""),
+                        n_results=arguments.get("n_results", 5)
+                    )
+                    query = validated.query
+                    n_results = validated.n_results
+                except Exception as validation_error:
+                    logger.error(f"[MCP] Invalid request parameters: {validation_error}")
+                    return JSONResponse({
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "error": {"code": -32602, "message": f"Invalid parameters: {str(validation_error)}"}
+                    })
 
-                logger.info(f"[MCP] Calling _storage.retrieve(query='{query}', n_results={n_results})")
+                logger.info(f"[MCP] Calling _storage.retrieve(query='{query[:100]}...', n_results={n_results})")
                 logger.debug(f"[MCP] Storage class: {_storage.__class__.__name__}")
 
                 try:
@@ -451,7 +561,15 @@ def main():
 
     # Configure for Claude Code integration
     port = int(os.getenv("MCP_SERVER_PORT", "8000"))
-    host = os.getenv("MCP_SERVER_HOST", "0.0.0.0")
+    host = os.getenv("MCP_SERVER_HOST", "127.0.0.1")  # Default to localhost for security
+
+    # Security warning if binding to all interfaces
+    if host == "0.0.0.0":
+        logger.warning("=" * 70)
+        logger.warning("⚠️  SECURITY WARNING: Binding to 0.0.0.0 (all network interfaces)")
+        logger.warning("⚠️  Service is accessible from the network!")
+        logger.warning("⚠️  Set MCP_SERVER_HOST=127.0.0.1 to restrict to localhost")
+        logger.warning("=" * 70)
 
     logger.info(f"Starting MCP Memory Service HTTP server on {host}:{port}")
     logger.info(f"Storage backend: {STORAGE_BACKEND}")

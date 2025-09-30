@@ -103,7 +103,8 @@ def is_model_fully_cached(model_name: str, hf_home: str) -> bool:
     try:
         with open(refs_main, 'r') as f:
             snapshot_hash = f.read().strip()
-    except:
+    except (IOError, FileNotFoundError, PermissionError) as e:
+        logger.debug(f"Could not read model snapshot reference: {e}")
         return False
 
     # Check if snapshot directory exists
