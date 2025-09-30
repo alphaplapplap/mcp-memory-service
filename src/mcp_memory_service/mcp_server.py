@@ -34,10 +34,12 @@ sys.path.insert(0, str(src_dir))
 
 from fastmcp import FastMCP, Context
 from mcp.types import TextContent
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import FastAPI, HTTPException, Header, Depends, Request, Response
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional
+import html
 
 # Import existing memory service components
 from .config import (
@@ -382,6 +384,77 @@ combined_app = FastAPI(
     lifespan=fastapi_lifespan
 )
 
+# =============================================================================
+# BATCH 2: HTTP SECURITY MIDDLEWARE
+# =============================================================================
+
+# SECURITY-5: CORS Middleware
+allowed_origins = os.getenv("CORS_ORIGINS", "http://localhost:*,https://localhost:*").split(",")
+combined_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["*"],
+    max_age=3600
+)
+
+# SECURITY-6: Security Headers Middleware
+@combined_app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Content-Security-Policy"] = "default-src 'self'"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+# SECURITY-8: Cache Control Middleware
+@combined_app.middleware("http")
+async def add_cache_control(request: Request, call_next):
+    response = await call_next(request)
+    # Prevent caching of sensitive data
+    if request.url.path.startswith("/api/") or request.url.path == "/mcp":
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+# SECURITY-4: HTTP Rate Limiting (Simple In-Memory)
+from collections import defaultdict
+from datetime import datetime, timedelta
+
+_rate_limit_cache = defaultdict(list)
+_rate_limit_lock = asyncio.Lock()
+
+async def check_rate_limit(request: Request):
+    """Simple in-memory rate limiter: 100 requests per minute per IP"""
+    client_ip = request.client.host if request.client else "unknown"
+    max_requests = int(os.getenv("HTTP_RATE_LIMIT", "100"))
+    window_seconds = 60
+
+    async with _rate_limit_lock:
+        now = datetime.now()
+        cutoff = now - timedelta(seconds=window_seconds)
+
+        # Clean old requests
+        _rate_limit_cache[client_ip] = [
+            req_time for req_time in _rate_limit_cache[client_ip]
+            if req_time > cutoff
+        ]
+
+        # Check limit
+        if len(_rate_limit_cache[client_ip]) >= max_requests:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded: {max_requests} requests per {window_seconds}s"
+            )
+
+        # Record this request
+        _rate_limit_cache[client_ip].append(now)
+
 # REST API endpoints
 def _get_backend_name(storage):
     """Derive backend name from storage class name dynamically"""
@@ -402,7 +475,7 @@ def _get_backend_name(storage):
 
     return name.lower()
 
-@combined_app.get("/api/health")
+@combined_app.get("/api/health", dependencies=[Depends(check_rate_limit)])
 async def health_check():
     """Basic health check endpoint"""
     if not _storage:
@@ -428,7 +501,7 @@ async def health_check():
         }
     })
 
-@combined_app.get("/api/health/detailed")
+@combined_app.get("/api/health/detailed", dependencies=[Depends(check_rate_limit)])
 async def detailed_health_check():
     """Detailed health check with statistics"""
     if not _storage:
@@ -463,7 +536,7 @@ async def detailed_health_check():
         raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}")
 
 # MCP JSON-RPC endpoint
-@combined_app.post("/mcp", dependencies=[Depends(verify_api_key)])
+@combined_app.post("/mcp", dependencies=[Depends(verify_api_key), Depends(check_rate_limit)])
 async def mcp_endpoint(request: dict):
     """Handle MCP protocol JSON-RPC requests (authenticated)"""
     logger.debug(f"[MCP] Received request: method={request.get('method')}, id={request.get('id')}")
@@ -511,11 +584,20 @@ async def mcp_endpoint(request: dict):
                 logger.debug(f"[MCP] Storage class: {_storage.__class__.__name__}")
 
                 try:
-                    results = await _storage.retrieve(
-                        query=query,
-                        n_results=n_results
+                    # SECURITY-7: Add timeout enforcement (30 seconds default)
+                    timeout_seconds = int(os.getenv("QUERY_TIMEOUT", "30"))
+                    results = await asyncio.wait_for(
+                        _storage.retrieve(query=query, n_results=n_results),
+                        timeout=timeout_seconds
                     )
                     logger.info(f"[MCP] Retrieved {len(results)} results from storage")
+                except asyncio.TimeoutError:
+                    logger.error(f"[MCP] Query timeout after {timeout_seconds}s")
+                    return JSONResponse({
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "error": {"code": -32603, "message": f"Query timeout after {timeout_seconds}s"}
+                    })
                 except Exception as storage_error:
                     logger.error(f"[MCP] Storage retrieve failed: {type(storage_error).__name__}: {storage_error}")
                     logger.exception("[MCP] Full traceback:")
