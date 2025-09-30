@@ -301,7 +301,8 @@ class MemoryClient {
             try {
                 await this.mcpClient.disconnect();
             } catch (error) {
-                // Ignore cleanup errors
+                // ERROR-5 FIX: Log cleanup errors instead of silent ignore
+                console.warn('[Memory Client] MCP disconnect error:', error.message);
             }
             this.mcpClient = null;
         }

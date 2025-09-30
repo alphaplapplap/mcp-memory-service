@@ -69,6 +69,8 @@ async function getRecentCommits(workingDir, options = {}) {
                 });
                 commit.files = filesOutput.trim().split('\n').filter(f => f.length > 0);
             } catch (error) {
+                // ERROR-9 FIX: Log git operation failures
+                console.debug(`[Git Analyzer] Failed to get files for commit ${commit.hash}:`, error.message);
                 commit.files = [];
             }
         }
@@ -76,7 +78,8 @@ async function getRecentCommits(workingDir, options = {}) {
         return commits;
         
     } catch (error) {
-        // Silently fail for non-git directories
+        // ERROR-9 FIX: Log git operation failures (non-git directories expected)
+        console.debug('[Git Analyzer] Not a git repository or git command failed:', error.message);
         return [];
     }
 }
@@ -173,7 +176,8 @@ async function parseChangelog(workingDir) {
         return recentEntries.length > 0 ? recentEntries : null;
         
     } catch (error) {
-        // Silently fail if changelog not found or not readable
+        // ERROR-9 FIX: Log changelog read failures (non-critical)
+        console.debug('[Git Analyzer] Changelog not found or not readable:', error.message);
         return null;
     }
 }
@@ -305,7 +309,8 @@ function buildGitContextQuery(projectContext, gitContext, userMessage = '') {
         return queries;
         
     } catch (error) {
-        // Return empty queries on error
+        // ERROR-9 FIX: Log query building failures
+        console.debug('[Git Analyzer] Failed to build git context queries:', error.message);
         return [];
     }
 }

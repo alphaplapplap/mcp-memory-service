@@ -46,7 +46,8 @@ class MCPClient extends EventEmitter {
                 }
             }
         } catch (error) {
-            // Ignore .env loading errors
+            // ERROR-7 FIX: Log .env loading failures (non-critical)
+            console.debug('[MCP Client] Failed to load .env file:', error.message);
         }
     }
 
@@ -124,7 +125,8 @@ class MCPClient extends EventEmitter {
                     const message = JSON.parse(line);
                     this.handleMessage(message);
                 } catch (error) {
-                    // Ignore malformed messages
+                    // ERROR-8 FIX: Log malformed messages for debugging
+                    console.warn('[MCP Client] Malformed JSON message:', line.substring(0, 100), 'Error:', error.message);
                 }
             }
         }

@@ -414,7 +414,8 @@ class MidConversationHook {
             try {
                 await this.memoryClient.disconnect();
             } catch (error) {
-                // Ignore cleanup errors
+                // ERROR-6 FIX: Log cleanup errors instead of silent ignore
+                console.warn('[Mid-Conversation Hook] Memory client disconnect error:', error.message);
             }
             this.memoryClient = null;
         }
