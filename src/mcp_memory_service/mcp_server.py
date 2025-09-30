@@ -610,9 +610,9 @@ async def mcp_endpoint(request: dict):
                     memories.append({
                         "content": result.memory.content,
                         "content_hash": result.memory.content_hash,
-                        "tags": result.memory.metadata.tags,
-                        "memory_type": result.memory.metadata.memory_type,
-                        "created_at": result.memory.metadata.created_at_iso,
+                        "tags": result.memory.tags,
+                        "memory_type": result.memory.memory_type,
+                        "created_at_iso": result.memory.created_at_iso,
                         "similarity_score": result.similarity_score
                     })
 
