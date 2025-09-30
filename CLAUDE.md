@@ -108,10 +108,11 @@ export MCP_API_KEY="$(openssl rand -base64 32)" # Generate secure API key
 **Intelligent automatic memory retrieval** with advanced semantic analysis and multi-tier performance optimization:
 
 ```bash
-# Installation (Zero-restart required)
-cd claude-hooks && ./install-natural-triggers.sh
+# Setup: Configure mid-conversation hook in ~/.claude/settings.json
+# Add to "UserPromptSubmit" hooks section:
+# "command": "node ~/.claude/hooks/core/mid-conversation.js"
 
-# CLI Management
+# CLI Management (works without restart)
 node ~/.claude/hooks/memory-mode-controller.js status
 node ~/.claude/hooks/memory-mode-controller.js profile balanced
 node ~/.claude/hooks/memory-mode-controller.js sensitivity 0.6
