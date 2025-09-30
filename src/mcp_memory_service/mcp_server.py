@@ -654,6 +654,72 @@ async def mcp_endpoint(request: dict):
                     }
                 })
 
+            elif tool_name == "store_memory":
+                # Validate input parameters
+                content = arguments.get("content")
+                if not content:
+                    return JSONResponse({
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "error": {"code": -32602, "message": "Content is required"}
+                    })
+
+                try:
+                    metadata = arguments.get("metadata", {})
+
+                    # Normalize tags to a list
+                    tags = arguments.get("tags", metadata.get("tags", []))
+                    if isinstance(tags, str):
+                        tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+                    elif not isinstance(tags, list):
+                        tags = []
+
+                    # Create memory object
+                    from .utils import generate_content_hash
+                    from .models.memory import Memory
+                    import time
+                    from datetime import datetime
+
+                    content_hash = generate_content_hash(content, metadata)
+                    now = time.time()
+                    memory = Memory(
+                        content=content,
+                        content_hash=content_hash,
+                        tags=tags,
+                        memory_type=arguments.get("memory_type", metadata.get("type", "note")),
+                        metadata=metadata,
+                        created_at=now,
+                        created_at_iso=datetime.utcfromtimestamp(now).isoformat() + "Z"
+                    )
+
+                    # Store memory
+                    success, message = await _storage.store(memory)
+
+                    response_data = {
+                        "success": success,
+                        "message": message,
+                        "content_hash": content_hash
+                    }
+
+                    logger.info(f"[MCP] Stored memory: {message}")
+
+                    return JSONResponse({
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "result": {
+                            "content": [{"type": "text", "text": str(response_data)}]
+                        }
+                    })
+
+                except Exception as store_error:
+                    logger.error(f"[MCP] Store failed: {type(store_error).__name__}: {store_error}")
+                    logger.exception("[MCP] Full traceback:")
+                    return JSONResponse({
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "error": {"code": -32603, "message": f"Store failed: {str(store_error)}"}
+                    })
+
             else:
                 logger.warning(f"[MCP] Unknown tool requested: {tool_name}")
                 return JSONResponse({
