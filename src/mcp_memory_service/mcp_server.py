@@ -225,10 +225,14 @@ async def mcp_server_lifespan(server: FastMCP) -> AsyncIterator[MCPServerContext
             batch_size=HYBRID_BATCH_SIZE
         )
     else:  # ChromaMemoryStorage
-        storage = StorageClass(
-            path=str(CHROMA_PATH)
+        # PERF-2 FIX: Wrap blocking ChromaDB initialization in to_thread
+        # ChromaDB's __init__ loads embedding models and initializes the database synchronously
+        logger.info("Initializing ChromaDB (async to avoid blocking event loop)...")
+        storage = await asyncio.to_thread(
+            lambda: StorageClass(path=str(CHROMA_PATH))
         )
-    
+        logger.info("ChromaDB initialization completed")
+
     # Initialize storage backend
     await storage.initialize()
 

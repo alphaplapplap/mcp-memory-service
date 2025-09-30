@@ -434,7 +434,8 @@ function scoreMemoryRelevance(memories, projectContext, options = {}) {
         return sortedMemories;
         
     } catch (error) {
-        if (verbose) console.error('[Memory Scorer] Error scoring memories:', error.message);
+        // ERROR-3 FIX: Always log errors regardless of verbose setting
+        console.error('[Memory Scorer] Error scoring memories:', error.message);
         return memories || [];
     }
 }
@@ -452,7 +453,8 @@ function filterByRelevance(memories, minScore = 0.3, options = {}) {
         return filtered;
         
     } catch (error) {
-        if (verbose) console.warn('[Memory Scorer] Error filtering memories:', error.message);
+        // ERROR-3 FIX: Always log errors regardless of verbose setting
+        console.warn('[Memory Scorer] Error filtering memories:', error.message);
         return memories;
     }
 }

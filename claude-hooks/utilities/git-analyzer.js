@@ -5,7 +5,11 @@
 
 const fs = require('fs').promises;
 const path = require('path');
-const { execSync } = require('child_process');
+const { exec: execCallback } = require('child_process');
+const { promisify } = require('util');
+
+// PERF-3 FIX: Use async exec instead of blocking execSync
+const exec = promisify(execCallback);
 
 /**
  * Get recent commit history with detailed information
@@ -29,9 +33,10 @@ async function getRecentCommits(workingDir, options = {}) {
         const sinceDate = new Date();
         sinceDate.setDate(sinceDate.getDate() - days);
         gitCommand += ` --since="${sinceDate.toISOString()}"`;
-        
-        const output = execSync(gitCommand, { 
-            cwd: path.resolve(workingDir), 
+
+        // PERF-3: Use async exec
+        const { stdout: output } = await exec(gitCommand, {
+            cwd: path.resolve(workingDir),
             encoding: 'utf8',
             timeout: 10000
         });
@@ -56,7 +61,8 @@ async function getRecentCommits(workingDir, options = {}) {
         const recentCommits = commits.slice(0, Math.min(5, commits.length));
         for (const commit of recentCommits) {
             try {
-                const filesOutput = execSync(`git show --name-only --pretty="" ${commit.fullHash}`, {
+                // PERF-3: Use async exec
+                const { stdout: filesOutput } = await exec(`git show --name-only --pretty="" ${commit.fullHash}`, {
                     cwd: path.resolve(workingDir),
                     encoding: 'utf8',
                     timeout: 5000
@@ -307,25 +313,29 @@ function buildGitContextQuery(projectContext, gitContext, userMessage = '') {
 /**
  * Get current git branch information
  */
-function getCurrentGitInfo(workingDir) {
+async function getCurrentGitInfo(workingDir) {
     try {
-        const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+        // PERF-3: Use async exec
+        const { stdout: branchOutput } = await exec('git rev-parse --abbrev-ref HEAD', {
             cwd: path.resolve(workingDir),
             encoding: 'utf8',
             timeout: 3000
-        }).trim();
-        
-        const lastCommit = execSync('git log -1 --pretty=format:"%h %s"', {
+        });
+        const branch = branchOutput.trim();
+
+        const { stdout: commitOutput } = await exec('git log -1 --pretty=format:"%h %s"', {
             cwd: path.resolve(workingDir),
             encoding: 'utf8',
             timeout: 3000
-        }).trim();
-        
-        const hasChanges = execSync('git status --porcelain', {
+        });
+        const lastCommit = commitOutput.trim();
+
+        const { stdout: statusOutput } = await exec('git status --porcelain', {
             cwd: path.resolve(workingDir),
             encoding: 'utf8',
             timeout: 3000
-        }).trim().length > 0;
+        });
+        const hasChanges = statusOutput.trim().length > 0;
         
         return {
             branch,
@@ -357,7 +367,7 @@ async function analyzeGitContext(workingDir, options = {}) {
         } = options;
         
         // Get basic git info
-        const gitInfo = getCurrentGitInfo(workingDir);
+        const gitInfo = await getCurrentGitInfo(workingDir);
         if (!gitInfo.isGitRepo) {
             return null;
         }

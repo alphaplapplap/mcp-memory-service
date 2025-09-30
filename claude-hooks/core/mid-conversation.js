@@ -460,22 +460,35 @@ async function onMidConversation(context) {
 
     const hook = getHookInstance(context.config);
 
+    // ERROR-4 FIX: Add execution logging
+    const startTime = Date.now();
+    console.log(`[Mid-Conversation Hook] Analyzing message: "${context.userMessage?.substring(0, 80)}..."`);
+
     try {
         // Analyze the current message
         const analysis = await hook.analyzeMessage(context.userMessage, context);
 
         if (analysis && analysis.shouldTrigger) {
+            console.log(`[Mid-Conversation Hook] Trigger detected (confidence: ${analysis.confidence?.toFixed(2) || 'N/A'})`);
+
             // Execute memory trigger
             const result = await hook.executeMemoryTrigger(analysis, context);
 
             if (result && result.success && context.injectSystemMessage) {
                 await context.injectSystemMessage(result.contextMessage);
-                console.log(`[Mid-Conversation Hook] Injected ${result.memoriesUsed} memories (confidence: ${result.confidence.toFixed(2)})`);
+                const duration = Date.now() - startTime;
+                console.log(`[Mid-Conversation Hook] ✓ Injected ${result.memoriesUsed} memories (confidence: ${result.confidence.toFixed(2)}, ${duration}ms)`);
+            } else {
+                console.log(`[Mid-Conversation Hook] Memory trigger executed but no memories injected`);
             }
+        } else {
+            const duration = Date.now() - startTime;
+            console.log(`[Mid-Conversation Hook] No trigger detected (${duration}ms)`);
         }
 
     } catch (error) {
-        console.error('[Mid-Conversation Hook] Hook execution failed:', error.message);
+        const duration = Date.now() - startTime;
+        console.error(`[Mid-Conversation Hook] Hook execution failed after ${duration}ms:`, error.message);
         // Don't cleanup on error - preserve state for next call
     }
 }
