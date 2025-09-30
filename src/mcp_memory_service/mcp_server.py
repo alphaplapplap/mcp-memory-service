@@ -15,6 +15,7 @@ Features:
 """
 
 import asyncio
+import json
 import logging
 from logging.handlers import RotatingFileHandler
 import time
@@ -628,7 +629,7 @@ async def mcp_endpoint(request: dict):
                     "jsonrpc": "2.0",
                     "id": request_id,
                     "result": {
-                        "content": [{"type": "text", "text": str(response_data)}]
+                        "content": [{"type": "text", "text": json.dumps(response_data)}]
                     }
                 })
 
@@ -650,7 +651,7 @@ async def mcp_endpoint(request: dict):
                     "jsonrpc": "2.0",
                     "id": request_id,
                     "result": {
-                        "content": [{"type": "text", "text": str(response_data)}]
+                        "content": [{"type": "text", "text": json.dumps(response_data)}]
                     }
                 })
 
@@ -707,7 +708,7 @@ async def mcp_endpoint(request: dict):
                         "jsonrpc": "2.0",
                         "id": request_id,
                         "result": {
-                            "content": [{"type": "text", "text": str(response_data)}]
+                            "content": [{"type": "text", "text": json.dumps(response_data)}]
                         }
                     })
 
