@@ -145,7 +145,7 @@ class RetrieveMemoryRequest(BaseModel):
     query: str = Field(min_length=1, max_length=10000, description="Search query")
     n_results: int = Field(ge=1, le=100, default=5, description="Number of results to return")
 
-async def verify_api_key(x_api_key: Optional[str] = Header(None)):
+async def verify_api_key(request: Request, x_api_key: Optional[str] = Header(None)):
     """Verify API key for authenticated endpoints"""
     expected_key = os.getenv("MCP_API_KEY")
 
@@ -156,7 +156,17 @@ async def verify_api_key(x_api_key: Optional[str] = Header(None)):
 
     # Validate provided key
     if not x_api_key or x_api_key != expected_key:
-        logger.warning(f"❌ Unauthorized access attempt from {os.getenv('REMOTE_ADDR', 'unknown')}")
+        # Enhanced logging with detailed information
+        client_ip = request.client.host if request.client else "unknown"
+        endpoint = request.url.path
+        missing_key = not x_api_key
+        invalid_key = x_api_key and x_api_key != expected_key
+
+        logger.warning(
+            f"❌ Unauthorized access attempt from {client_ip} "
+            f"to {endpoint} "
+            f"(missing_key: {missing_key}, invalid_key: {invalid_key})"
+        )
         raise HTTPException(
             status_code=401,
             detail="Invalid or missing API key. Set X-API-Key header."
