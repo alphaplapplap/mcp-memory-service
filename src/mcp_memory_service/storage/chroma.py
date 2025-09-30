@@ -1552,5 +1552,62 @@ class ChromaMemoryStorage(MemoryStorage):
     def record_query_time(self, duration: float):
         """Record a query time for performance tracking."""
         _PERFORMANCE_STATS["query_times"].append(duration)
+
+    def cleanup(self):
+        """
+        Clean up resources to prevent leaks on shutdown.
+
+        Fixes LEAK-1: Semaphore leak from sentence-transformers multiprocessing.
+        """
+        try:
+            logger.info("Cleaning up ChromaMemoryStorage resources...")
+
+            # Clean up sentence-transformers model and threadpool
+            if self.model is not None:
+                try:
+                    # Close the joblib/loky threadpool executor used by sentence-transformers
+                    # This prevents the semaphore leak on shutdown
+                    if hasattr(self.model, '_pool'):
+                        self.model._pool.close()
+                        self.model._pool.join()
+                        logger.debug("Closed sentence-transformers threadpool")
+
+                    # Clear GPU memory if using CUDA/MPS
+                    device = self.embedding_settings.get('device', 'cpu')
+                    if device in ['cuda', 'mps']:
+                        try:
+                            import torch
+                            if device == 'cuda' and torch.cuda.is_available():
+                                torch.cuda.empty_cache()
+                                logger.debug("Cleared CUDA cache")
+                            elif device == 'mps' and torch.backends.mps.is_available():
+                                # MPS doesn't have explicit cache clearing, but we can move model to CPU
+                                self.model.to('cpu')
+                                logger.debug("Moved model from MPS to CPU")
+                        except Exception as gpu_error:
+                            logger.debug(f"GPU cleanup warning: {gpu_error}")
+
+                    # Clear the model reference
+                    self.model = None
+                    logger.debug("Cleared model reference")
+
+                except Exception as model_cleanup_error:
+                    logger.warning(f"Model cleanup warning: {model_cleanup_error}")
+
+            # Close ChromaDB client if open
+            if self.client is not None:
+                try:
+                    # ChromaDB's PersistentClient doesn't have explicit close,
+                    # but we can clear the reference
+                    self.client = None
+                    logger.debug("Cleared ChromaDB client reference")
+                except Exception as client_error:
+                    logger.debug(f"Client cleanup warning: {client_error}")
+
+            logger.info("ChromaMemoryStorage cleanup completed")
+
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")
+            # Don't raise - cleanup should be best-effort
         if len(_PERFORMANCE_STATS["query_times"]) > 100:
             _PERFORMANCE_STATS["query_times"] = _PERFORMANCE_STATS["query_times"][-100:]

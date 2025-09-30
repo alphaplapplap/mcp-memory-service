@@ -16,6 +16,7 @@ Features:
 
 import asyncio
 import logging
+from logging.handlers import RotatingFileHandler
 import time
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
@@ -93,15 +94,44 @@ def get_storage_backend():
         return _get_sqlite_vec_storage("Failed to import default SQLite-vec storage")
 from .models.memory import Memory
 
-# Configure logging with environment-controlled level
+# Configure logging with environment-controlled level and rotation (LEAK-2 FIX)
 log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
 log_level = getattr(logging, log_level_name, logging.INFO)
-logging.basicConfig(
-    level=log_level,
-    format='%(levelname)s:%(name)s:%(message)s'
+
+# Set up logging with rotation to prevent unbounded log growth
+log_format = '%(levelname)s:%(name)s:%(message)s'
+log_dir = os.getenv("MCP_LOG_DIR", os.path.expanduser("~/Library/Logs/Claude"))
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, "mcp-memory-service.log")
+
+# Create root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(log_level)
+
+# Remove any existing handlers to avoid duplicates
+for handler in root_logger.handlers[:]:
+    root_logger.removeHandler(handler)
+
+# Add rotating file handler (max 10MB, keep 5 backup files)
+file_handler = RotatingFileHandler(
+    log_file,
+    maxBytes=10 * 1024 * 1024,  # 10MB
+    backupCount=5,
+    encoding='utf-8'
 )
+file_handler.setLevel(log_level)
+file_handler.setFormatter(logging.Formatter(log_format))
+root_logger.addHandler(file_handler)
+
+# Add console handler for stderr
+console_handler = logging.StreamHandler()
+console_handler.setLevel(log_level)
+console_handler.setFormatter(logging.Formatter(log_format))
+root_logger.addHandler(console_handler)
+
 logger = logging.getLogger(__name__)
 logger.info(f"Logging level set to: {log_level_name}")
+logger.info(f"Log file: {log_file} (max 10MB, 5 backups)")
 
 # =============================================================================
 # SECURITY & VALIDATION
@@ -321,6 +351,14 @@ async def mcp_server_lifespan(server: FastMCP) -> AsyncIterator[MCPServerContext
     finally:
         # Cleanup on shutdown
         logger.info("Shutting down MCP Memory Service components...")
+
+        # LEAK-1 FIX: Call cleanup() to prevent semaphore leak
+        if hasattr(storage, 'cleanup'):
+            try:
+                storage.cleanup()
+            except Exception as cleanup_error:
+                logger.warning(f"Cleanup error: {cleanup_error}")
+
         if hasattr(storage, 'close'):
             await storage.close()
 

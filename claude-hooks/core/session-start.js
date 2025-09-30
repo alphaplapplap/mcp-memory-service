@@ -14,6 +14,20 @@ const { detectContextShift, extractCurrentContext, determineRefreshStrategy } = 
 const { analyzeGitContext, buildGitContextQuery } = require('../utilities/git-analyzer');
 const { MemoryClient } = require('../utilities/memory-client');
 
+// =============================================================================
+// ERROR-2 FIX: Global error handlers to catch unhandled rejections
+// =============================================================================
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('[Memory Hook] ❌ UNHANDLED REJECTION:', reason);
+    console.error('[Memory Hook] Promise:', promise);
+    // Don't exit - let the hook continue
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('[Memory Hook] ❌ UNCAUGHT EXCEPTION:', error);
+    // Don't exit - let the hook continue
+});
+
 /**
  * Load hook configuration
  */
