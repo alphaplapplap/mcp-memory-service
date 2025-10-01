@@ -1,13 +1,13 @@
 {
   "memoryService": {
-    "protocol": "mcp",
-    "preferredProtocol": "mcp",
+    "protocol": "http",
+    "preferredProtocol": "http",
     "fallbackEnabled": true,
     "http": {
-      "endpoint": "https://localhost:8443",
+      "endpoint": "http://localhost:8443",
       "apiKey": "test-key-123",
       "healthCheckTimeout": 3000,
-      "useDetailedHealthCheck": true
+      "useDetailedHealthCheck": false
     },
     "mcp": {
       "serverCommand": [
@@ -115,7 +115,7 @@
     "showRecencyInfo": true,
     "showPhaseDetails": true,
     "showGitAnalysis": true,
-    "cleanMode": false
+    "cleanMode": true
   },
   "naturalTriggers": {
     "enabled": true,
