@@ -78,18 +78,22 @@ journalctl -u mcp-memory-service -f                   # Monitor service logs
 
 **Essential Configuration:**
 ```bash
-# Storage Backend (Cloudflare is PRODUCTION default)
-export MCP_MEMORY_STORAGE_BACKEND=cloudflare  # cloudflare|sqlite_vec|chroma
+# Storage Backend (ChromaDB recommended for local development)
+export MCP_MEMORY_STORAGE_BACKEND=chroma  # chroma|sqlite_vec|cloudflare|hybrid
 
-# Cloudflare Production Configuration (REQUIRED)
-export CLOUDFLARE_API_TOKEN="your-token"      # Required for Cloudflare backend
-export CLOUDFLARE_ACCOUNT_ID="your-account"   # Required for Cloudflare backend
-export CLOUDFLARE_D1_DATABASE_ID="your-d1-id" # Required for Cloudflare backend
-export CLOUDFLARE_VECTORIZE_INDEX="mcp-memory-index" # Required for Cloudflare backend
+# ChromaDB Configuration (RECOMMENDED for local use)
+export MCP_MEMORY_CHROMA_PATH="~/.mcp-memory/chroma"  # Local ChromaDB path
+export CHROMA_TELEMETRY_ENABLED=False  # Disable telemetry
+
+# Cloudflare Configuration (OPTIONAL - for remote/cloud deployments)
+# export CLOUDFLARE_API_TOKEN="your-token"
+# export CLOUDFLARE_ACCOUNT_ID="your-account"
+# export CLOUDFLARE_D1_DATABASE_ID="your-d1-id"
+# export CLOUDFLARE_VECTORIZE_INDEX="mcp-memory-index"
 
 # Web Interface (Optional)
 export MCP_HTTP_ENABLED=true                  # Enable HTTP server
-export MCP_HTTPS_ENABLED=true                 # Enable HTTPS (production)
+export MCP_HTTPS_ENABLED=false                # HTTPS (use true for production)
 export MCP_API_KEY="$(openssl rand -base64 32)" # Generate secure API key
 ```
 
@@ -97,7 +101,11 @@ export MCP_API_KEY="$(openssl rand -base64 32)" # Generate secure API key
 
 **✅ Automatic Configuration Loading (v6.16.0+):** The service now automatically loads `.env` files and respects environment variable precedence. CLI defaults no longer override environment configuration.
 
-**⚠️  Important:** This system uses **Cloudflare as the primary backend**. If health checks show SQLite-vec instead of Cloudflare, this indicates a configuration issue that needs to be resolved.
+**💡 Storage Backend Selection:** Choose the backend that fits your use case:
+- **ChromaDB**: Recommended for local development and single-user setups (fast, reliable)
+- **Hybrid**: Best for production with local speed + cloud backup
+- **Cloudflare**: For pure cloud deployments or multi-device sync
+- **SQLite-vec**: Lightweight alternative for constrained environments
 
 **Platform Support:** macOS (MPS/CPU), Windows (CUDA/DirectML/CPU), Linux (CUDA/ROCm/CPU)
 
@@ -189,14 +197,14 @@ node ~/.claude/hooks/memory-mode-controller.js sensitivity 0.6
 
 | Backend | Performance | Use Case | Installation |
 |---------|-------------|----------|--------------|
-| **Hybrid** ⚡ | **Fast (5ms read)** | **🌟 Production (Recommended)** | `install.py --storage-backend hybrid` |
-| **Cloudflare** ☁️ | Network dependent | Legacy cloud-only | `install.py --storage-backend cloudflare` |
-| SQLite-Vec 🪶 | Fast (5ms read) | Development, single-user | `install.py --storage-backend sqlite_vec` |
-| ChromaDB 👥 | Medium (15ms read) | Team, multi-client local | `install.py --storage-backend chromadb` |
+| **ChromaDB** 👥 | **Fast (10ms read)** | **🌟 Local Development (Recommended)** | `install.py --storage-backend chromadb` |
+| **Hybrid** ⚡ | Fast (5ms read) | Production with cloud sync | `install.py --storage-backend hybrid` |
+| SQLite-Vec 🪶 | Fast (5ms read) | Lightweight, single-user | `install.py --storage-backend sqlite_vec` |
+| **Cloudflare** ☁️ | Network dependent | Cloud-only deployments | `install.py --storage-backend cloudflare` |
 
-### 🚀 **Hybrid Backend (v6.21.0+) - RECOMMENDED**
+### 🚀 **Hybrid Backend (v6.21.0+)**
 
-The **Hybrid backend** provides the best of both worlds - **SQLite-vec speed with Cloudflare persistence**:
+The **Hybrid backend** provides the best of both worlds - **SQLite-vec speed with Cloudflare persistence** for production deployments requiring cloud backup:
 
 ```bash
 # Enable hybrid backend

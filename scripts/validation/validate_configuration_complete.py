@@ -45,9 +45,10 @@ class ComprehensiveConfigValidator:
         # Local project MCP config (should usually not exist for memory service)
         self.local_mcp_config_file = self.project_root / '.mcp.json'
 
-        # Required environment variables for Cloudflare backend
-        self.required_vars = [
-            'MCP_MEMORY_STORAGE_BACKEND',
+        # Required environment variables (backend-dependent)
+        self.base_required_vars = ['MCP_MEMORY_STORAGE_BACKEND']
+
+        self.cloudflare_vars = [
             'CLOUDFLARE_API_TOKEN',
             'CLOUDFLARE_ACCOUNT_ID',
             'CLOUDFLARE_D1_DATABASE_ID',
@@ -115,25 +116,28 @@ class ComprehensiveConfigValidator:
         """Validate .env file configuration."""
         env_vars = self.load_env_file()
 
+        # Check backend setting first
+        backend = env_vars.get('MCP_MEMORY_STORAGE_BACKEND', '').lower()
+
+        # Determine required variables based on backend
+        required_vars = self.base_required_vars.copy()
+        if backend in ['cloudflare', 'hybrid']:
+            required_vars.extend(self.cloudflare_vars)
+
         # Check for required variables
         missing_vars = []
-        for var in self.required_vars:
+        for var in required_vars:
             if var not in env_vars or not env_vars[var].strip():
                 missing_vars.append(var)
 
         if missing_vars:
-            self.add_error(f"Missing required variables in .env file: {missing_vars}")
+            if backend not in ['cloudflare', 'hybrid'] and any(v in self.cloudflare_vars for v in missing_vars):
+                # Only Cloudflare vars missing, but not using Cloudflare - this is OK
+                self.add_warning(f".env configured for '{backend}' backend (Cloudflare variables not required)")
+            else:
+                self.add_error(f"Missing required variables for '{backend}' backend: {missing_vars}")
         else:
-            self.add_success("All required variables present in .env file")
-
-        # Check backend setting
-        backend = env_vars.get('MCP_MEMORY_STORAGE_BACKEND', '').lower()
-        if backend == 'cloudflare':
-            self.add_success(".env file configured for Cloudflare backend")
-        elif backend:
-            self.add_warning(f".env file configured for '{backend}' backend (not Cloudflare)")
-        else:
-            self.add_error("MCP_MEMORY_STORAGE_BACKEND not set in .env file")
+            self.add_success(f"All required variables present for '{backend}' backend")
 
         return env_vars
 
@@ -158,16 +162,24 @@ class ComprehensiveConfigValidator:
         # Get environment variables from memory server config
         memory_env = memory_server.get('env', {})
 
-        # Check required variables
+        # Check required variables based on backend
+        backend = str(memory_env.get('MCP_MEMORY_STORAGE_BACKEND', '')).lower()
+        required_vars = self.base_required_vars.copy()
+        if backend in ['cloudflare', 'hybrid']:
+            required_vars.extend(self.cloudflare_vars)
+
         missing_vars = []
-        for var in self.required_vars:
+        for var in required_vars:
             if var not in memory_env or not str(memory_env[var]).strip():
                 missing_vars.append(var)
 
         if missing_vars:
-            self.add_error(f"Missing required variables in Claude Desktop config: {missing_vars}")
+            if backend not in ['cloudflare', 'hybrid'] and any(v in self.cloudflare_vars for v in missing_vars):
+                self.add_warning(f"Claude Desktop configured for '{backend}' backend (Cloudflare variables not required)")
+            else:
+                self.add_error(f"Missing required variables for '{backend}' backend in Claude Desktop config: {missing_vars}")
         else:
-            self.add_success("All required variables present in Claude Desktop config")
+            self.add_success(f"All required variables present for '{backend}' backend in Claude Desktop config")
 
         return memory_env
 
@@ -219,9 +231,18 @@ class ComprehensiveConfigValidator:
             self.add_error("Cannot compare configurations - Claude Desktop config not available")
             return
 
-        # Compare each required variable
+        # Get backends to determine which vars to compare
+        env_backend = env_config.get('MCP_MEMORY_STORAGE_BACKEND', '').lower()
+        claude_backend = str(claude_desktop_config.get('MCP_MEMORY_STORAGE_BACKEND', '')).lower()
+
+        # Build list of vars to compare based on backends
+        vars_to_compare = self.base_required_vars.copy()
+        if env_backend in ['cloudflare', 'hybrid'] or claude_backend in ['cloudflare', 'hybrid']:
+            vars_to_compare.extend(self.cloudflare_vars)
+
+        # Compare each variable
         differences = []
-        for var in self.required_vars:
+        for var in vars_to_compare:
             env_value = env_config.get(var, '<MISSING>')
             claude_value = str(claude_desktop_config.get(var, '<MISSING>'))
 
@@ -258,7 +279,18 @@ class ComprehensiveConfigValidator:
         return True, "Token format appears valid"
 
     def validate_api_tokens(self, env_config: Dict[str, str], claude_desktop_config: Optional[Dict[str, str]]):
-        """Validate API tokens in both configurations."""
+        """Validate API tokens in both configurations (only for Cloudflare/hybrid backends)."""
+        # Check if Cloudflare backend is being used
+        env_backend = env_config.get('MCP_MEMORY_STORAGE_BACKEND', '').lower()
+        claude_backend = str(claude_desktop_config.get('MCP_MEMORY_STORAGE_BACKEND', '')) if claude_desktop_config else ''
+        claude_backend = claude_backend.lower()
+
+        needs_cloudflare = env_backend in ['cloudflare', 'hybrid'] or claude_backend in ['cloudflare', 'hybrid']
+
+        if not needs_cloudflare:
+            self.add_success(f"API token validation skipped (backend: {env_backend}, Cloudflare not required)")
+            return
+
         # Check .env token
         env_token = env_config.get('CLOUDFLARE_API_TOKEN', '')
         is_valid, message = self.validate_api_token_format(env_token)

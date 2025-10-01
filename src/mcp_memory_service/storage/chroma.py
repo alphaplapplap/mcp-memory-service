@@ -1509,6 +1509,73 @@ class ChromaMemoryStorage(MemoryStorage):
             logger.error(f"Error counting memories: {str(e)}")
             return 0
 
+    async def get_all_tags(self) -> List[str]:
+        """Get all unique tags from all memories."""
+        try:
+            if self.collection is None:
+                return []
+
+            # Get all metadatas
+            results = self.collection.get(include=["metadatas"])
+
+            # Extract tags
+            all_tags = set()
+            for metadata in results.get("metadatas", []):
+                if metadata and "tags" in metadata:
+                    tags = metadata["tags"]
+                    if isinstance(tags, str):
+                        all_tags.add(tags)
+                    elif isinstance(tags, list):
+                        all_tags.update(tags)
+
+            return sorted(list(all_tags))
+        except Exception as e:
+            logger.error(f"Error getting tags: {str(e)}")
+            return []
+
+    async def get_stats(self) -> Dict[str, Any]:
+        """Get storage statistics including memory count, tags, and database size."""
+        try:
+            # Get total memory count
+            total_memories = await self.count_all_memories()
+
+            # Get all tags
+            all_tags = await self.get_all_tags()
+            total_tags = len(all_tags)
+
+            # Calculate database size
+            database_size_mb = 0
+            if self.path and os.path.exists(self.path):
+                # Calculate size of ChromaDB directory
+                total_size = 0
+                for dirpath, dirnames, filenames in os.walk(self.path):
+                    for filename in filenames:
+                        filepath = os.path.join(dirpath, filename)
+                        if os.path.exists(filepath):
+                            total_size += os.path.getsize(filepath)
+                database_size_mb = round(total_size / (1024 * 1024), 2)
+
+            return {
+                "total_memories": total_memories,
+                "total_tags": total_tags,
+                "unique_tags": total_tags,
+                "database_size_mb": database_size_mb,
+                "storage_backend": "chroma",
+                "status": "operational",
+                "timestamp": datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Error getting stats: {str(e)}")
+            return {
+                "total_memories": 0,
+                "total_tags": 0,
+                "unique_tags": 0,
+                "database_size_mb": 0,
+                "storage_backend": "chroma",
+                "status": "error",
+                "timestamp": datetime.now().isoformat()
+            }
+
     def get_performance_stats(self) -> Dict[str, Any]:
         """Get performance statistics for monitoring."""
         with _CACHE_LOCK:
